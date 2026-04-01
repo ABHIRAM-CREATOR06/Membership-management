@@ -13,26 +13,45 @@ interface DataContextType {
     events: Event[];
     addEvent: (event: Event) => void;
     updateEvent: (id: string, updates: Partial<Event>) => void;
-    deleteEvent: (id: string) => void;
+    deleteEvent: (eventId: string) => void;
+    clearAllData: () => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+const DATA_VERSION = "v2";
+
 export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
+    // Check for data version and clear old localStorage data if needed
     const [members, setMembers] = useState<Member[]>(() => {
+        const dataVersion = localStorage.getItem("dataVersion");
+        if (dataVersion !== DATA_VERSION) {
+            localStorage.removeItem("members");
+            localStorage.removeItem("tasks");
+            localStorage.removeItem("events");
+            localStorage.setItem("dataVersion", DATA_VERSION);
+            return initialMembers;
+        }
         const saved = localStorage.getItem("members");
         return saved ? JSON.parse(saved) : initialMembers;
     });
 
     const [tasks, setTasks] = useState<Task[]>(() => {
+        const dataVersion = localStorage.getItem("dataVersion");
+        if (dataVersion !== DATA_VERSION) {
+            return initialTasks;
+        }
         const saved = localStorage.getItem("tasks");
         return saved ? JSON.parse(saved) : initialTasks;
     });
 
     const [events, setEvents] = useState<Event[]>(() => {
+        const dataVersion = localStorage.getItem("dataVersion");
+        if (dataVersion !== DATA_VERSION) {
+            return initialEvents;
+        }
         const saved = localStorage.getItem("events");
         const loadedEvents: Event[] = saved ? JSON.parse(saved) : initialEvents;
-        // Migration: Ensure all events have budget and expenses
         return loadedEvents.map(e => ({
             ...e,
             budget: e.budget ?? 0,
@@ -78,7 +97,6 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const updateEvent = (id: string, updates: Partial<Event>) => {
         const oldEvent = events.find(e => e.id === id);
         if (oldEvent && updates.title && updates.title !== oldEvent.title) {
-            // Title changed, update associated tasks
             setTasks(prev => prev.map(t => t.event === oldEvent.title ? { ...t, event: updates.title! } : t));
         }
         setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
@@ -86,10 +104,19 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const deleteEvent = (id: string) => {
         const eventToDelete = events.find(e => e.id === id);
         if (eventToDelete) {
-            // Optional: clear event field in tasks
             setTasks(prev => prev.map(t => t.event === eventToDelete.title ? { ...t, event: "" } : t));
         }
         setEvents((prev) => prev.filter((e) => e.id !== id));
+    };
+
+    const clearAllData = () => {
+        localStorage.removeItem("members");
+        localStorage.removeItem("tasks");
+        localStorage.removeItem("events");
+        localStorage.removeItem("dataVersion");
+        setMembers(initialMembers);
+        setTasks(initialTasks);
+        setEvents(initialEvents);
     };
 
     return (
@@ -107,6 +134,7 @@ export const DataProvider: FC<{ children: ReactNode }> = ({ children }) => {
                 addEvent,
                 updateEvent,
                 deleteEvent,
+                clearAllData,
             }}
         >
             {children}
